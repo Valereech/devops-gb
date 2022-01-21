@@ -1,0 +1,117 @@
+valereech@laptop:~/devops-gb/os_hw$ ls -l
+total 0
+Создадим файл file.txt и запишем в него некий текст:
+valereech@laptop:~/devops-gb/os_hw$ echo 'Add symlink' > file.txt
+valereech@laptop:~/devops-gb/os_hw$ cat file.txt
+Add symlink
+
+Создадим символическую ссылку на этот файл:
+valereech@laptop:~/devops-gb/os_hw$ ln -s file.txt symlink
+valereech@laptop:~/devops-gb/os_hw$ ls -lh
+total 4.0K
+-rw-r--r-- 1 valereech valereech 12 Dec 21 16:02 file.txt
+lrwxrwxrwx 1 valereech valereech  8 Dec 21 16:03 symlink -> file.txt
+
+А также жесткую сылку:
+valereech@laptop:~/devops-gb/os_hw$ ln file.txt hardlink
+valereech@laptop:~/devops-gb/os_hw$ ls -li
+total 8
+39110 -rw-r--r-- 2 valereech valereech 12 Dec 21 16:02 file.txt
+39110 -rw-r--r-- 2 valereech valereech 12 Dec 21 16:02 hardlink
+39122 lrwxrwxrwx 1 valereech valereech  8 Dec 21 16:03 symlink -> file.txt
+
+Проверим содержимое в символической и жесткой ссылке:
+valereech@laptop:~/devops-gb/os_hw$ cat symlink
+Add symlink
+valereech@laptop:~/devops-gb/os_hw$ cat hardlink
+Add symlink
+
+Попробуем удалить файл и убедимся, что символическая ссылка перестала работать, а жесткая продолжает существовать как отдельный файл:
+valereech@laptop:~/devops-gb/os_hw$ rm file.txt
+valereech@laptop:~/devops-gb/os_hw$ ls -li
+total 4
+39110 -rw-r--r-- 1 valereech valereech 12 Dec 21 16:02 hardlink
+39122 lrwxrwxrwx 1 valereech valereech  8 Dec 21 16:03 symlink -> file.txt
+valereech@laptop:~/devops-gb/os_hw$ cat symlink
+cat: symlink: No such file or directory
+valereech@laptop:~/devops-gb/os_hw$ cat hardlink
+Add symlink
+
+Попробую восстановить файл, но с другим содержимым. Название прежнее: file.txt.
+valereech@laptop:~/devops-gb/os_hw$ echo 'added new file' > file.txt
+valereech@laptop:~/devops-gb/os_hw$ ls -li
+total 8
+39218 -rw-r--r-- 1 valereech valereech 15 Dec 21 21:38 file.txt
+39110 -rw-r--r-- 1 valereech valereech 12 Dec 21 16:02 hardlink
+39122 lrwxrwxrwx 1 valereech valereech  8 Dec 21 16:03 symlink -> file.txt
+valereech@laptop:~/devops-gb/os_hw$ cat symlink
+added new file
+valereech@laptop:~/devops-gb/os_hw$ cat hardlink
+Add symlink
+
+Символическая ссылка снова стала работать и показывает содержимое уже нового файла file.txt. А вот жесткая ссылка по-прежнему имеет 
+первоначальное значение. Дело все в том, жесткая ссылка - это по сути еще одно имя файла с тем же inode. Т.е. она ссылается на те же 
+данные на диске, что и сам первоначальный файл. А вот символическая ссылка ссылается на имя файла, при этом в системе существует как 
+отдельный файл со своим inode. Имена файлов хранятся в директориях, соответственно, при удалении файла, символическая ссылка пытается
+получить доступ к данным из файла по имени, информация о котором была удалена.
+
+По умолчанию, в установленном образе Ubuntu 20.04 LTS в моем случае есть только 3 диска (физически есть только SSD на 512ГБ):
+valereech@laptop:~$ lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sdb      8:16   0   256G  0 disk 
+sdc      8:32   0 339.8M  1 disk 
+sdd      8:48   0   256G  0 disk /
+
+Для дальнейшего выполнения задачи потребовалось дополнительно изучить работу с wsl2. В результате, был создан виртуальный жесткий диск в Windows 
+и примонтирован к wsl2. Теперь этот диск доступен в Ubuntu. В дополнение, при помощи утилиты fdisk создам на нем таблицу разделов GPT, размером 500МБ.
+Таким образом, выполню сразу п.3 задания. Также, пришлось еще создать файловую систему ext4 на разделе /dev/sdd1 при помощи утилиты mkfs.
+valereech@laptop:~$ lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda      8:0    0   256G  0 disk 
+sdb      8:16   0 339.8M  1 disk 
+sdc      8:32   0   256G  0 disk /
+sdd      8:48   0   9.8G  0 disk 
+└─sdd1   8:49   0   500M  0 part 
+
+valereech@laptop:~$ sudo mkfs -t ext4 -L root /dev/sdd1
+mke2fs 1.45.5 (07-Jan-2020)
+Discarding device blocks: done                            
+Creating filesystem with 128000 4k blocks and 128000 inodes
+Filesystem UUID: 109f6bc7-641f-44ac-a4ae-c725ac57d7a0
+Superblock backups stored on blocks: 
+        32768, 98304
+
+Allocating group tables: done                            
+Writing inode tables: done                            
+Creating journal (4096 blocks): done
+Writing superblocks and filesystem accounting information: done
+
+Далее раздел sdd1 примонтирую к директории, в котором размещу файл с названием file1.txt 
+valereech@laptop:~$ mkdir vdisk1
+valereech@laptop:~$ sudo mount /dev/sdd1 ~/vdisk1
+valereech@laptop:~$ lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda      8:0    0   256G  0 disk 
+sdb      8:16   0 339.8M  1 disk 
+sdc      8:32   0   256G  0 disk /
+sdd      8:48   0   9.8G  0 disk 
+└─sdd1   8:49   0   500M  0 part /home/valereech/vdisk1
+
+В данном разделе создам директорию vdisk1/, в ней еще одну - testlinks/, в которой файл:
+valereech@laptop:~/vdisk1/testlinks$ echo 'added mount partition' > file1.txt
+valereech@laptop:~/vdisk1/testlinks$ cat file1.txt
+added mount partition
+Далее перейдем в другую директорию и попробуем из нее создать ссылки на file1.txt на примонтированном разделе /dev/sdd1
+valereech@laptop:~/devops-gb/os_hw$ ls
+file.txt  hardlink  symlink
+valereech@laptop:~/devops-gb/os_hw$ ln /testlinks/file1.txt
+ln: failed to access '/testlinks/file1.txt': No such file or directory
+valereech@laptop:~/devops-gb/os_hw$ ln ~/vdisk1/testlinks/file1.txt
+ln: failed to create hard link './file1.txt' => '/home/valereech/vdisk1/testlinks/file1.txt': Invalid cross-device link
+valereech@laptop:~/devops-gb/os_hw$ ln -s ~/vdisk1/testlinks/file1.txt
+valereech@laptop:~/devops-gb/os_hw$ ls
+file.txt  file1.txt  hardlink  symlink
+valereech@laptop:~/devops-gb/os_hw$ cat file1.txt
+added mount partition
+
+Получается, жесткую ссылку создать на файл на другом диске невозможно. При этом символическая ссылка работает. 
