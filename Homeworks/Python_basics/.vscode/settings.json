@@ -1,0 +1,9 @@
+{
+    "workbench.editor.autoLockGroups": {
+        "default": true,
+        "workbench.input.interactive": true,
+        "vscode.markdown.preview.editor": true
+    },
+    "python.linting.pycodestyleEnabled": true,
+    "python.linting.enabled": true
+}
